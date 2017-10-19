@@ -1,7 +1,7 @@
 #![feature(proc_macro)]
 
-#[macro_use]
 extern crate jenny_derive;
+extern crate jenny;
 
 use jenny_derive::jni;
 

@@ -1,82 +1,44 @@
-#![feature(proc_macro)]
+extern crate jni;
 
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate quote;
-extern crate syn;
-extern crate proc_macro;
-extern crate case;
+pub use jni::JNIEnv;
+pub use jni::objects::JClass;
+use jni::objects::JString;
 
-use case::CaseExt;
-use proc_macro::TokenStream;
-
-#[proc_macro_attribute]
-pub fn jni(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let func = syn::parse_item(&item.to_string()).unwrap();
-    let jni_func = generate_jni_func(&func);
-
-    let res = quote! {
-        #func
-        #jni_func
-    };
-
-    res.parse().unwrap()
+pub trait JvmConvertible<'a> {
+    type JvmType;
+    fn into_jvm_type(self, env: &'a JNIEnv) -> Self::JvmType;
+    fn from_jvm_type(env: &'a JNIEnv, jvm_value: Self::JvmType) -> Self;
 }
 
-fn generate_jni_func(source: &syn::Item) -> quote::Tokens {
-    if let syn::Item { ref ident, node: syn::ItemKind::Fn(ref decl, ..), .. } = *source {
-        let name = jni_name(ident.as_ref(), decl.inputs.as_ref());
-        let mod_name = format!("mod_{}", name);
-        let args = jni_args(decl.inputs.as_ref());
-        let ret = jni_ret(&decl.output);
-        let body = jni_body(ident.as_ref(), decl);
-        quote! {
-            mod #mod_name {
-                #[no_mangle]
-                extern "C" fn #name(#(#args),*) -> #ret {
-                    #body
-                }
-            }
-        }
-    } else {
-        panic!("eeeeh")
+impl<'a> JvmConvertible<'a> for String {
+    type JvmType = JString<'a>;
+
+    fn into_jvm_type(self, env: &'a JNIEnv) -> Self::JvmType {
+        env.new_string(self).expect("Couldn't create Java string")
+    }
+
+    fn from_jvm_type(env: &'a JNIEnv, jvm_value: Self::JvmType) -> Self {
+        env.get_string(jvm_value).expect("Couldn't get Java string").into()
     }
 }
 
-fn jni_name(rust_name: &str, rust_args: &[syn::FnArg]) -> String {
-    // TODO: do something better here, preferably user defined
-    let package_name = "rust_jenny";
+macro_rules! jvm_primitives {
+    ($($typ:ty),*) => {
+        $(
+            impl<'a> JvmConvertible<'a> for $typ {
+                type JvmType = $typ;
 
-    // see Table 2-1 from http://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/design.html
-    // for the escape codes
-    // TODO: do something user defined if user asks
-    let class_name = rust_name.to_camel().replace("_", "_1");
+                fn into_jvm_type(self, _env: &'a JNIEnv) -> Self::JvmType {
+                    self
+                }
 
-    // TODO: support renaming
-    let func_name = rust_name.replace("_", "_1");
-    let func_signature = jni_signature(rust_args);
-
-    format!("Java_{pkg}_{cls}_{func}__{sig}",
-            pkg = package_name,
-            cls = class_name,
-            func = func_name,
-            sig = func_signature)
+                fn from_jvm_type(_env: &'a JNIEnv, jvm_value: Self::JvmType) -> Self {
+                    jvm_value
+                }
+            }
+        )*
+    };
 }
 
-fn jni_signature(rust_args: &[syn::FnArg]) -> String {
-    println!("rust_args = {:#?}", rust_args);
-    unimplemented!()
-}
-
-fn jni_args(rust_args: &[syn::FnArg]) -> Vec<quote::Tokens> {
-    unimplemented!()
-}
-
-fn jni_ret(rust_ret: &syn::FunctionRetTy) -> quote::Tokens {
-    unimplemented!()
-}
-
-fn jni_body(rust_name: &str, rust_args: &syn::FnDecl) -> quote::Tokens {
-    unimplemented!()
-}
+// see jni::sys for available types
+jvm_primitives!(i32, i64, i8, u8, u16, i16, f32, f64, ());
