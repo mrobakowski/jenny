@@ -55,6 +55,8 @@ pub fn jni(attrs: TokenStream, item: TokenStream) -> TokenStream {
         #jni_func
     };
 
+    println!("res = {:?}", res);
+
     res.parse().unwrap()
 }
 
@@ -69,7 +71,7 @@ fn generate_jni_func(source: &syn::Item, opts: &JennyOptions) -> quote::Tokens {
             #[allow(non_snake_case)]
             pub mod #mod_name {
                 #[no_mangle]
-                pub extern "system" fn #name(__jenny_jni_env: jenny::JNIEnv, __jenny_jni_class: jenny::JClass, #(#args),*) -> #ret {
+                pub extern "system" fn #name<'__jenny_env>(__jenny_jni_env: jenny::JNIEnv<'__jenny_env>, __jenny_jni_class: jenny::JClass, #(#args),*) -> #ret {
                     #body
                 }
             }
@@ -125,7 +127,7 @@ fn jni_ret(rust_ret: &syn::FunctionRetTy) -> quote::Tokens {
     use syn::FunctionRetTy::*;
     match *rust_ret {
         Default => quote!(()),
-        Ty(ref typ) => quote!(<#typ as jenny::JvmConvertible<'static>>::JvmType)
+        Ty(ref typ) => quote!(<#typ as jenny::JvmConvertible<'__jenny_env>>::JvmType)
     }
 }
 
