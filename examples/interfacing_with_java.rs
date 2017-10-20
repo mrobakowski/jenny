@@ -7,7 +7,11 @@ use jenny_derive::jni;
 
 fn main() {
     println!("Hello world");
-    let x = foo(1, 2.0);
+
+    let (a, b, c, d) = unsafe { std::mem::uninitialized() };
+    use mod_Java_rust_jenny_Foo_foo::Java_rust_jenny_Foo_foo;
+
+    let _ = Java_rust_jenny_Foo_foo(a, b, c, d);
 }
 
 #[jni]
