@@ -9,4 +9,8 @@ jni = "0.6.0"
 [dev-dependencies]
 jenny-derive = {path = "jenny-derive"}
 
+[[example]]
+name = "hello-world"
+crate-type = ["dylib"]
+
 [workspace]

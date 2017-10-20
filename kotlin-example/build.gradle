@@ -1,3 +1,6 @@
+group 'com.mrobakowski.jenny'
+version '1.0-SNAPSHOT'
+
 buildscript {
     ext.kotlin_version = '1.1.51'
 
@@ -8,9 +11,6 @@ buildscript {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
-
-group 'com.mrobakowski.jenny'
-version '1.0-SNAPSHOT'
 
 apply plugin: 'kotlin'
 

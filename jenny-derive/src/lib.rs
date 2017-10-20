@@ -11,24 +11,56 @@ use case::CaseExt;
 use proc_macro::TokenStream;
 use quote::Ident;
 
+#[derive(Debug, Clone)]
+struct JennyOptions {
+    class: Option<String>,
+    name: Option<String>
+}
+
+impl From<syn::Attribute> for JennyOptions {
+    fn from(attr: syn::Attribute) -> Self {
+        use syn::MetaItem::*;
+        use syn::NestedMetaItem;
+        use syn::Lit::Str;
+
+        match attr.value {
+            Word(..) | NameValue(..) => JennyOptions { class: None, name: None },
+            List(_, meta) => {
+                let mut res = JennyOptions { class: None, name: None };
+                for opt in meta {
+                    if let NestedMetaItem::MetaItem(NameValue(name, Str(val, ..))) = opt {
+                        match name.as_ref() {
+                            "class" => { res.class = Some(val); },
+                            "name" => { res.name = Some(val) },
+                            _ => ()
+                        }
+                    }
+                }
+                res
+            }
+        }
+    }
+}
+
 #[proc_macro_attribute]
-pub fn jni(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn jni(attrs: TokenStream, item: TokenStream) -> TokenStream {
+    let attrs = syn::parse_outer_attr(&format!("#[jni{}]", attrs.to_string())).unwrap();
+    let options: JennyOptions = attrs.into();
+
     let func = syn::parse_item(&item.to_string()).unwrap();
-    let jni_func = generate_jni_func(&func);
+    let jni_func = generate_jni_func(&func, &options);
 
     let res: quote::Tokens = quote! {
         #func
         #jni_func
     };
 
-    println!("res = {:?}", res);
-
     res.parse().unwrap()
 }
 
-fn generate_jni_func(source: &syn::Item) -> quote::Tokens {
+fn generate_jni_func(source: &syn::Item, opts: &JennyOptions) -> quote::Tokens {
     if let syn::Item { ref ident, node: syn::ItemKind::Fn(ref decl, ..), .. } = *source {
-        let name = Ident::new(jni_name(ident.as_ref(), decl.inputs.as_ref()));
+        let name = Ident::new(jni_name(ident.as_ref(), decl.inputs.as_ref(), &opts));
         let mod_name = Ident::new(format!("mod_{}", name));
         let args = jni_args(decl.inputs.as_ref());
         let ret = jni_ret(&decl.output);
@@ -47,26 +79,24 @@ fn generate_jni_func(source: &syn::Item) -> quote::Tokens {
     }
 }
 
-fn jni_name(rust_name: &str, _rust_args: &[syn::FnArg]) -> String {
-    // TODO: do something better here, preferably user defined
-    let package_name = "rust_jenny";
-
+fn jni_name(rust_name: &str, _rust_args: &[syn::FnArg], opts: &JennyOptions) -> String {
     // see Table 2-1 from http://docs.oracle.com/javase/7/docs/technotes/guides/jni/spec/design.html
     // for the escape codes
-    // TODO: do something user defined if user asks
-    let class_name = rust_name.to_camel().replace("_", "_1");
+    let package_and_class = opts.class.as_ref().map(|x| x.replace("_", "_1").replace(".", "_")).unwrap_or_else(|| {
+        let package_name = "rust_jenny";
+        let class_name = rust_name.to_camel().replace("_", "_1");
+        format!("{}_{}", package_name, class_name)
+    });
 
-    // TODO: support renaming
-    let func_name = rust_name.replace("_", "_1");
+    let func_name = opts.name.as_ref().map(|x| x.as_ref()).unwrap_or(rust_name).replace("_", "_1");
 
     // TODO: figure out how to make signatures work in case of overloaded methods
     // let func_signature = jni_signature(rust_args);
 
     format!(
         // "Java_{pkg}_{cls}_{func}__{sig}", // TODO: signature
-        "Java_{pkg}_{cls}_{func}",
-        pkg = package_name,
-        cls = class_name,
+        "Java_{pkg_and_cls}_{func}",
+        pkg_and_cls = package_and_class,
         func = func_name,
         // sig = func_signature // TODO: signature
     )
