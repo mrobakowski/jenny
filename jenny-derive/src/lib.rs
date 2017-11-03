@@ -1,6 +1,5 @@
-#![feature(proc_macro)]
+#![feature(proc_macro, box_patterns)]
 
-extern crate lazy_static;
 #[macro_use]
 extern crate quote;
 extern crate syn;
@@ -10,6 +9,7 @@ extern crate case;
 use case::CaseExt;
 use proc_macro::TokenStream;
 use quote::Ident;
+use syn::Ty;
 
 #[derive(Debug, Clone)]
 struct JennyOptions {
@@ -30,8 +30,8 @@ impl From<syn::Attribute> for JennyOptions {
                 for opt in meta {
                     if let NestedMetaItem::MetaItem(NameValue(name, Str(val, ..))) = opt {
                         match name.as_ref() {
-                            "class" => { res.class = Some(val); },
-                            "name" => { res.name = Some(val) },
+                            "class" => { res.class = Some(val); }
+                            "name" => { res.name = Some(val) }
                             _ => ()
                         }
                     }
@@ -55,23 +55,28 @@ pub fn jni(attrs: TokenStream, item: TokenStream) -> TokenStream {
         #jni_func
     };
 
-    println!("res = {:?}", res);
+    println!("{}\n", res.as_ref());
 
     res.parse().unwrap()
 }
 
 fn generate_jni_func(source: &syn::Item, opts: &JennyOptions) -> quote::Tokens {
-    if let syn::Item { ref ident, node: syn::ItemKind::Fn(ref decl, ..), .. } = *source {
+    if let syn::Item { ref ident, node: syn::ItemKind::Fn(ref decl, _, _, _, ref generics, ..), .. } = *source {
         let name = Ident::new(jni_name(ident.as_ref(), decl.inputs.as_ref(), &opts));
         let mod_name = Ident::new(format!("mod_{}", name));
         let args = jni_args(decl.inputs.as_ref());
         let ret = jni_ret(&decl.output);
         let body = jni_body(ident.as_ref(), decl);
+        let extra_lifetimes = &generics.lifetimes;
         quote! {
-            #[allow(non_snake_case)]
+            #[allow(non_snake_case, unused_imports)]
             pub mod #mod_name {
                 #[no_mangle]
-                pub extern "system" fn #name<'__jenny_env>(__jenny_jni_env: jenny::JNIEnv<'__jenny_env>, __jenny_jni_class: jenny::JClass, #(#args),*) -> #ret {
+                pub extern "system" fn #name<'__jenny_env #(,#extra_lifetimes)*>(
+                    __jenny_jni_env: jenny::JNIEnv<'__jenny_env>,
+                    __jenny_jni_class: jenny::JClass,
+                    #(#args,)*
+                ) -> #ret {
                     #body
                 }
             }
@@ -113,10 +118,20 @@ fn jni_signature(rust_args: &[syn::FnArg]) -> String {
 fn jni_args(rust_args: &[syn::FnArg]) -> Vec<quote::Tokens> {
     rust_args.iter().enumerate().map(|(i, a)| {
         use syn::FnArg::*;
+        use syn::MutTy;
         match (a, syn::Pat::Wild) {
             (&Captured(_, ref typ), _) | (&Ignored(ref typ), _) => {
                 let arg_name = Ident::new(format!("__jenny_arg_{}", i));
-                quote!(#arg_name: <#typ as jenny::JvmConvertible>::JvmType)
+
+                // if we have a borrow of some kind, try owned version
+                // in particular, this often works for &str
+                // TODO: come up with better solution
+                // maaaaaaybe use specialisation?
+                if let &Ty::Rptr(_, box MutTy { ref ty, .. }) = typ {
+                    quote!(#arg_name: <<#ty as ::std::borrow::ToOwned>::Owned as jenny::FromJvmType<'__jenny_env>>::JvmType)
+                } else {
+                    quote!(#arg_name: <#typ as jenny::FromJvmType<'__jenny_env>>::JvmType)
+                }
             }
             (&SelfRef(..), _) | (&SelfValue(..), _) => panic!("Self arguments are not yet supported by jenny!")
         }
@@ -127,7 +142,7 @@ fn jni_ret(rust_ret: &syn::FunctionRetTy) -> quote::Tokens {
     use syn::FunctionRetTy::*;
     match *rust_ret {
         Default => quote!(()),
-        Ty(ref typ) => quote!(<#typ as jenny::JvmConvertible<'__jenny_env>>::JvmType)
+        Ty(ref typ) => quote!(<#typ as jenny::IntoJvmType<'__jenny_env>>::JvmType)
     }
 }
 
@@ -137,15 +152,25 @@ fn jni_body(rust_name: &str, rust_args: &syn::FnDecl) -> quote::Tokens {
     let (arg_conversions, arg_names): (Vec<quote::Tokens>, Vec<_>) = rust_args.inputs.iter().enumerate().map(|(i, arg)| {
         use syn::FnArg::*;
         let name = Ident::new(format!("__jenny_arg_{}", i));
+        let maybe_refd_name;
         let typ = match *arg {
-            Captured(_, ref t) | Ignored(ref t) => t,
+            Captured(_, ref t) | Ignored(ref t) => {
+                use syn::MutTy;
+                if let &Ty::Rptr(_, box MutTy { ref ty, .. }) = t {
+                    maybe_refd_name = Ident::new(format!("&__jenny_arg_{}", i));
+                    quote!(<#ty as ::std::borrow::ToOwned>::Owned)
+                } else {
+                    maybe_refd_name = Ident::new(format!("__jenny_arg_{}", i));
+                    quote!(#t)
+                }
+            }
             SelfValue(..) | SelfRef(..) => panic!("Self arguments are not yet supported by jenny!")
         };
-        (quote!(let #name = #typ::from_jvm_type(&__jenny_jni_env, #name);), name)
+        (quote!(let #name = #typ::from_jvm_type(&__jenny_jni_env, #name);), maybe_refd_name)
     }).unzip();
 
     quote! {
-        use jenny::JvmConvertible;
+        use jenny::{FromJvmType, IntoJvmType};
 
         // argument conversions
         #(#arg_conversions)*

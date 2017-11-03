@@ -8,6 +8,7 @@ object HelloWorld {
     external fun helloWorld()
     external fun foo(x: Long, y: Float): Double
     external fun bestLangName(): String
+    external fun containsRust(s: String): Boolean
 }
 
 fun platformSpecificLibName(name: String): String {
