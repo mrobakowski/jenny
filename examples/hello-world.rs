@@ -94,7 +94,7 @@ mod generated_code {
             __jenny_arg_0: <<str as ::std::borrow::ToOwned>::Owned as jenny::FromJvmType<'__jenny_env>>::JvmType
         ) -> <bool as jenny::IntoJvmType<'__jenny_env>>::JvmType {
             use jenny::{FromJvmType, IntoJvmType};
-            let __jenny_arg_0 = <str as ::std::borrow::ToOwned>::Owned::from_jvm_type(&__jenny_jni_env, __jenny_arg_0);
+            let __jenny_arg_0 = <str as ::std::borrow::ToOwned>::Owned::from_jvm_type(&__jenny_jni_env, __jenny_arg_0); // TODO: generalize, maybe using trait specialisation?
             contains_rust(&__jenny_arg_0).into_jvm_type(&__jenny_jni_env)
         }
     }
