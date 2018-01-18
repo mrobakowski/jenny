@@ -14,7 +14,7 @@ object HelloWorld {
 fun platformSpecificLibName(name: String): String {
     val platform = System.getProperty("os.name").toLowerCase()
     return when {
-        "win" in platform -> "$name.dll"
+        "windows" in platform -> "$name.dll"
         "nix" in platform || "nux" in platform -> "lib$name.so"
         else -> "<unknown platform>"
     }

@@ -45,10 +45,10 @@ mod generated_code {
         pub extern "system" fn Java_com_mrobakowski_jenny_HelloWorld_foo<'__jenny_env>(
             __jenny_jni_env: jenny::JNIEnv<'__jenny_env>,
             __jenny_jni_class: jenny::JClass,
-            __jenny_arg_0: <i64 as jenny::FromJvmType<'__jenny_env>>::JvmType,
-            __jenny_arg_1: <f32 as jenny::FromJvmType<'__jenny_env>>::JvmType
-        ) -> <f64 as jenny::IntoJvmType<'__jenny_env>>::JvmType {
-            use jenny::{FromJvmType, IntoJvmType};
+            __jenny_arg_0: <i64 as jenny::FromJvmValue<'__jenny_env>>::JvmValue,
+            __jenny_arg_1: <f32 as jenny::FromJvmValue<'__jenny_env>>::JvmValue,
+        ) -> <f64 as jenny::IntoJvmValue<'__jenny_env>>::JvmValue {
+            use jenny::{FromJvmValue, BorrowFromJvmValue, IntoJvmValue};
             let __jenny_arg_0 = i64::from_jvm_type(&__jenny_jni_env, __jenny_arg_0);
             let __jenny_arg_1 = f32::from_jvm_type(&__jenny_jni_env, __jenny_arg_1);
             foo(__jenny_arg_0, __jenny_arg_1).into_jvm_type(&__jenny_jni_env)
@@ -62,9 +62,9 @@ mod generated_code {
         #[no_mangle]
         pub extern "system" fn Java_com_mrobakowski_jenny_HelloWorld_helloWorld<'__jenny_env>(
             __jenny_jni_env: jenny::JNIEnv<'__jenny_env>,
-            __jenny_jni_class: jenny::JClass
+            __jenny_jni_class: jenny::JClass,
         ) -> () {
-            use jenny::{FromJvmType, IntoJvmType};
+            use jenny::{FromJvmValue, BorrowFromJvmValue, IntoJvmValue};
             hello_world().into_jvm_type(&__jenny_jni_env)
         }
     }
@@ -76,9 +76,9 @@ mod generated_code {
         #[no_mangle]
         pub extern "system" fn Java_com_mrobakowski_jenny_HelloWorld_bestLangName<'__jenny_env>(
             __jenny_jni_env: jenny::JNIEnv<'__jenny_env>,
-            __jenny_jni_class: jenny::JClass
-        ) -> <&'static str as jenny::IntoJvmType<'__jenny_env>>::JvmType {
-            use jenny::{FromJvmType, IntoJvmType};
+            __jenny_jni_class: jenny::JClass,
+        ) -> <&'static str as jenny::IntoJvmValue<'__jenny_env>>::JvmValue {
+            use jenny::{FromJvmValue, BorrowFromJvmValue, IntoJvmValue};
             best_lang_name().into_jvm_type(&__jenny_jni_env)
         }
     }
@@ -91,11 +91,11 @@ mod generated_code {
         pub extern "system" fn Java_com_mrobakowski_jenny_HelloWorld_containsRust<'__jenny_env, 'a>(
             __jenny_jni_env: jenny::JNIEnv<'__jenny_env>,
             __jenny_jni_class: jenny::JClass,
-            __jenny_arg_0: <<str as ::std::borrow::ToOwned>::Owned as jenny::FromJvmType<'__jenny_env>>::JvmType
-        ) -> <bool as jenny::IntoJvmType<'__jenny_env>>::JvmType {
-            use jenny::{FromJvmType, IntoJvmType};
-            let __jenny_arg_0 = <str as ::std::borrow::ToOwned>::Owned::from_jvm_type(&__jenny_jni_env, __jenny_arg_0); // TODO: generalize, maybe using trait specialisation?
-            contains_rust(&__jenny_arg_0).into_jvm_type(&__jenny_jni_env)
+            __jenny_arg_0: <<str as jenny::BorrowFromJvmValue<'__jenny_env>>::Impl as jenny::BorrowFromJvmValueImpl<'__jenny_env>>::JvmValue,
+        ) -> <bool as jenny::IntoJvmValue<'__jenny_env>>::JvmValue {
+            use jenny::{FromJvmValue, BorrowFromJvmValue, IntoJvmValue};
+            let __jenny_arg_0 = str::jvm_type_into_tmp(&__jenny_jni_env, __jenny_arg_0);
+            contains_rust(<str as BorrowFromJvmValue>::tmp_as_ref(&__jenny_arg_0)).into_jvm_type(&__jenny_jni_env)
         }
     }
 }
