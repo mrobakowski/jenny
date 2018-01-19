@@ -11,7 +11,8 @@ pub trait FromJvmValue<'jni> {
 }
 
 pub trait BorrowFromJvmValue<'jni> {
-    type Impl: BorrowFromJvmValueImpl<'jni, This=Self>; // see the comment on [BorrowFromJvmValueImpl] as to why this is here
+    // see the comment on [BorrowFromJvmValueImpl] as to why this is here
+    type Impl: BorrowFromJvmValueImpl<'jni, This=Self>;
 
     #[inline]
     fn jvm_type_into_tmp<'a>(
@@ -79,32 +80,9 @@ impl<'jni, 'a, T> IntoJvmValue<'jni> for &'a T
     }
 }
 
-pub struct StrBorrowFromJvmValueImpl;
-
-impl<'jni> BorrowFromJvmValueImpl<'jni> for StrBorrowFromJvmValueImpl {
-    type JvmValue = JString<'jni>;
-    type TmpStorage = String;
-    type This = str;
-
-    #[inline]
-    fn jvm_type_into_tmp<'a>(env: &'a JNIEnv<'jni>, jvm_value: Self::JvmValue) -> Self::TmpStorage {
-        <String as FromJvmValue<'jni>>::from_jvm_type(env, jvm_value)
-    }
-
-    #[inline]
-    fn tmp_as_ref<'a>(tmp: &'a Self::TmpStorage) -> &'a Self::This {
-        use std::borrow::Borrow;
-        tmp.borrow()
-    }
-}
-
-impl<'jni> BorrowFromJvmValue<'jni> for str {
-    type Impl = StrBorrowFromJvmValueImpl;
-}
-
 use std::marker::PhantomData;
 
-pub struct DirectBorrowFromJvmValueImpl<T>(PhantomData<T>);
+pub struct DirectBorrowFromJvmValueImpl<T: ? Sized>(PhantomData<T>);
 
 impl<'jni, T> BorrowFromJvmValueImpl<'jni> for DirectBorrowFromJvmValueImpl<T>
     where T: FromJvmValue<'jni> {
@@ -114,6 +92,8 @@ impl<'jni, T> BorrowFromJvmValueImpl<'jni> for DirectBorrowFromJvmValueImpl<T>
 
     #[inline]
     fn jvm_type_into_tmp<'a>(env: &'a JNIEnv<'jni>, jvm_value: Self::JvmValue) -> Self::TmpStorage {
+        // the line below is just to test if the correct implementation is used
+        #[cfg(test)] { panic!("using DirectBorrowFromJvmValueImpl"); }; // forgive me padre
         <T as FromJvmValue<'jni>>::from_jvm_type(env, jvm_value)
     }
 
@@ -123,9 +103,9 @@ impl<'jni, T> BorrowFromJvmValueImpl<'jni> for DirectBorrowFromJvmValueImpl<T>
     }
 }
 
-pub struct ToOwnedBorrowFromJvmValueImpl<T>(PhantomData<T>);
+pub struct ToOwnedBorrowFromJvmValueImpl<T: ? Sized>(PhantomData<T>);
 
-impl<'jni, T> BorrowFromJvmValueImpl<'jni> for ToOwnedBorrowFromJvmValueImpl<T>
+impl<'jni, T: ? Sized> BorrowFromJvmValueImpl<'jni> for ToOwnedBorrowFromJvmValueImpl<T>
     where T: ToOwned, <T as ToOwned>::Owned: FromJvmValue<'jni> {
     type JvmValue = <<T as ToOwned>::Owned as FromJvmValue<'jni>>::JvmValue;
     type TmpStorage = <T as ToOwned>::Owned;
@@ -133,6 +113,8 @@ impl<'jni, T> BorrowFromJvmValueImpl<'jni> for ToOwnedBorrowFromJvmValueImpl<T>
 
     #[inline]
     fn jvm_type_into_tmp<'a>(env: &'a JNIEnv<'jni>, jvm_value: Self::JvmValue) -> Self::TmpStorage {
+        // the line below is just to test if the correct implementation is used
+        #[cfg(test)] { panic!("using ToOwnedBorrowFromJvmValueImpl"); }; // forgive me padre
         <Self::TmpStorage as FromJvmValue<'jni>>::from_jvm_type(env, jvm_value)
     }
 
@@ -144,7 +126,7 @@ impl<'jni, T> BorrowFromJvmValueImpl<'jni> for ToOwnedBorrowFromJvmValueImpl<T>
 }
 
 impl<'jni, T> BorrowFromJvmValue<'jni> for T
-    where T: ToOwned, <T as ToOwned>::Owned: FromJvmValue<'jni> {
+    where T: ToOwned + ?Sized, <T as ToOwned>::Owned: FromJvmValue<'jni> {
     default type Impl = ToOwnedBorrowFromJvmValueImpl<T>;
 }
 
@@ -208,28 +190,23 @@ impl_direct_borrow_from_jvm_type!(
     i32, i64, i8, u8, u16, i16, f32, f64, (), String, bool
 );
 
-macro_rules! assert_impl {
-    (@gen < $($generics:tt),+ >; $x:ty, $($t:path),+ $(,)*) => {
-        {
-            fn assert_impl< $($generics),+, T>() where T: ?Sized $(+ $t)+ {}
-            assert_impl::<$x>();
-        }
-    };
-    ($x:ty, $($t:path),+ $(,)*) => {
-        {
-            fn assert_impl<T>() where T: ?Sized $(+ $t)+ {}
-            assert_impl::<$x>();
-        }
-    };
-    ($label:ident; $($xs:tt)+) => {
-        #[allow(dead_code, non_snake_case)]
-        fn $label() { assert_impl!($($xs)+); }
-    };
-    ($label:ident < $($generics:tt),+ >; $($xs:tt)+) => {
-        #[allow(dead_code, non_snake_case)]
-        fn $label<$($generics),+>() { assert_impl!(@gen <$($generics),+>; $($xs)+); }
-    };
-}
+#[cfg(test)]
+mod test {
+    #[test] fn check_impl_for_str() {
+        use super::*;
+        let res = ::std::panic::catch_unwind(|| unsafe {
+            <str as BorrowFromJvmValue>::jvm_type_into_tmp(::std::mem::zeroed(), ::std::mem::zeroed())
+        });
 
-assert_impl!(str<'jni>; str, BorrowFromJvmValue<'jni>);
-assert_impl!(refString<'jni>; String, BorrowFromJvmValue<'jni>);
+        assert_eq!(res.err().unwrap().downcast::<&'static str>().ok(), Some(Box::new("using ToOwnedBorrowFromJvmValueImpl")))
+    }
+
+    #[test] fn check_impl_for_string() {
+        use super::*;
+        let res = ::std::panic::catch_unwind(|| unsafe {
+            <String as BorrowFromJvmValue>::jvm_type_into_tmp(::std::mem::zeroed(), ::std::mem::zeroed())
+        });
+
+        assert_eq!(res.err().unwrap().downcast::<&'static str>().ok(), Some(Box::new("using DirectBorrowFromJvmValueImpl")))
+    }
+}
